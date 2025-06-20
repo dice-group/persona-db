@@ -2,9 +2,7 @@ import os
 from awq import AutoAWQForCausalLM
 from transformers import AutoTokenizer
 
-
 token = os.environ["HF_TOKEN"]
-
 
 model_path = 'meta-llama/Meta-Llama-3-8B-Instruct'
 quant_path = model_path + "_awq"
