@@ -4,7 +4,7 @@ from transformers import AutoTokenizer
 
 token = os.environ["HF_TOKEN"]
 
-model_path = 'meta-llama/Meta-Llama-3-8B-Instruct'
+model_path = 'meta-llama/Llama-3.3-70B-Instruct'
 quant_path = model_path + "_awq"
 quant_config = { "zero_point": True, "q_group_size": 128, "w_bit": 4, "version": "GEMM" }
 
