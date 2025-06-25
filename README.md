@@ -8,15 +8,16 @@ This repository host the implementation of the persona databases project
     git clone https://github.com/dice-group/persona-db.git
     cd persona-db
 
-3. Create and activate a Conda environment:
+2. Create and activate a Conda environment:
     ```bash
     conda create -n .venv python=3.11.13 --no-default-packages
     conda activate .venv
    
-5. Install pip and dependencies:
+3. Install pip and dependencies:
     ```bash 
     conda install pip3
     pip3 install -r requirements.txt
+
 4. Configure your model and dataset split:
     - Open `config.py`.
       - Set MODEL_NAME to the path of your quantized model.

@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from datasets import load_dataset
+from datasets import Dataset
 from config import (
     MODEL_NAME,
     DATASET_NAME,
@@ -22,9 +22,17 @@ from utils import (
 from prompt_builder import build_extraction_prompt
 from vllm import LLM, SamplingParams
 from tqdm import tqdm
+from typing import List, Dict, Any, Tuple
 
 
-def main():
+def main() -> None:
+    """
+    Main function to process personas using a language model, generate outputs, 
+    extract JSON, and save results to disk.
+
+    Loads the dataset, builds prompts, generates outputs with vLLM, extracts JSON,
+    and saves results or error logs for each persona.
+    """
     print(f"Initializing vLLM with model: {MODEL_NAME}...")
     llm = LLM(
         MODEL_NAME,
@@ -57,7 +65,7 @@ def main():
     processed_ids_at_start = get_processed_persona_ids(RESULTS_DIR)
     initial_completed_count = len(processed_ids_at_start)
 
-    personas_to_process_tuples = []
+    personas_to_process_tuples: List[Tuple[int, str]] = []
     for global_idx, data_entry in enumerate(full_datasets):
         if global_idx not in processed_ids_at_start:
             personas_to_process_tuples.append((global_idx, data_entry["persona"]))
@@ -72,8 +80,8 @@ def main():
         print("All personas have been successfully processed. Exiting.")
         return
 
-    list_of_prompts_for_vllm = []
-    vllm_output_idx_to_global_idx = {}
+    list_of_prompts_for_vllm: List[str] = []
+    vllm_output_idx_to_global_idx: Dict[int, int] = {}
     for i, (global_idx, persona_text) in enumerate(personas_to_process_tuples):
         prompt = build_extraction_prompt(persona_text, template_json)
         list_of_prompts_for_vllm.append(prompt)

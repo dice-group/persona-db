@@ -3,14 +3,14 @@ import json
 
 def build_extraction_prompt(persona: str, template_json: dict) -> str:
     """
-    Constructs the prompt for extracting structured information from a persona.
+    Build a prompt for extracting structured information from a persona using a JSON template.
 
     Args:
         persona (str): The text content of the persona.
-        template_json (dict): The JSON template (as a dictionary) to be filled.
+        template_json (dict): The JSON template as a dictionary.
 
     Returns:
-        str: The complete prompt string.
+        str: The formatted prompt string for the language model.
     """
     template_str = json.dumps({key: "" for key in template_json.keys()}, indent=2)
 

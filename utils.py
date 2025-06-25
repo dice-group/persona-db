@@ -1,19 +1,52 @@
 import json
 import os
 import re
-from typing import Set
+from typing import Set, Dict
 
 def load_json_template(path: str) -> dict:
+    """
+    Load a JSON template from a file.
+
+    Args:
+        path (str): Path to the JSON file.
+
+    Returns:
+        dict: Loaded JSON as a dictionary.
+    """
     with open(path, "r") as f:
         return json.load(f)
 
 def format_template_for_prompt(template: dict) -> str:
+    """
+    Format a JSON template for use in a prompt, setting all values to empty strings.
+
+    Args:
+        template (dict): The JSON template.
+
+    Returns:
+        str: JSON string with all values set to empty strings.
+    """
     return json.dumps({key: "" for key in template.keys()}, indent=2)
 
-def ensure_directory_exists(directory_path: str):
+def ensure_directory_exists(directory_path: str) -> None:
+    """
+    Ensure that a directory exists, creating it if necessary.
+
+    Args:
+        directory_path (str): Path to the directory.
+    """
     os.makedirs(directory_path, exist_ok=True)
 
 def get_processed_persona_ids(results_dir: str) -> Set[int]:
+    """
+    Get the set of processed persona IDs by scanning the results directory for JSON files.
+
+    Args:
+        results_dir (str): Directory containing result files.
+
+    Returns:
+        Set[int]: Set of processed persona IDs.
+    """
     processed_ids = set()
     os.makedirs(results_dir, exist_ok=True)
 
@@ -52,6 +85,15 @@ def get_processed_persona_ids(results_dir: str) -> Set[int]:
     return processed_ids
 
 def extract_json_from_output(text: str) -> str:
+    """
+    Extract a JSON string from model output text.
+
+    Args:
+        text (str): The output text from the model.
+
+    Returns:
+        str: Extracted JSON string if found, otherwise returns the original text.
+    """
     extracted_json_str = ""
     json_match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
     

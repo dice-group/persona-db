@@ -4,7 +4,13 @@ from typing import List, Union
 
 
 class LlamaModel:
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str) -> None:
+        """
+        Initialize the LlamaModel with a specified model name.
+
+        Args:
+            model_name (str): The name or path of the pretrained model to load.
+        """
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.padding_side = "left"
 
@@ -23,6 +29,17 @@ class LlamaModel:
         max_new_tokens: int = 1024,
         temperature: float = 0.2,
     ) -> Union[str, List[str]]:
+        """
+        Generate text responses for one or more prompts.
+
+        Args:
+            prompts (Union[str, List[str]]): A single prompt string or a list of prompt strings.
+            max_new_tokens (int, optional): Maximum number of new tokens to generate. Defaults to 1024.
+            temperature (float, optional): Sampling temperature. Higher values increase randomness. Defaults to 0.2.
+
+        Returns:
+            Union[str, List[str]]: Generated response(s) as a string or list of strings.
+        """
         if isinstance(prompts, str):
             prompts_list = [prompts]
             return_single = True
