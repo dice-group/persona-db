@@ -14,7 +14,7 @@ from config import (
     RESULTS_DIR,
     MAX_NEW_TOKENS,
     TEMPERATURE,
-    BATCH_SIZE,
+    MAX_NUM_SEQS,
 )
 from utils import (
     load_json_template,
@@ -23,216 +23,154 @@ from utils import (
     get_processed_persona_ids,
 )
 from prompt_builder import build_extraction_prompt
-from typing import List, Dict, Any, Tuple
+from vllm import LLM, SamplingParams
 from tqdm import tqdm
 
 
-def _worker_process_wrapper(args):
-    return worker_process(*args)
-
-
-def worker_process(
-    persona_data_chunk: List[Tuple[int, str]],
-    gpu_id: int,
-    config_params: Dict[str, Any],
-) -> List[Tuple[int, str, Any]]:
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-
-    from inference import LlamaModel
-
-    model_name = config_params["MODEL_NAME"]
-    template_path = config_params["TEMPLATE_PATH"]
-    results_dir = config_params["RESULTS_DIR"]
-    max_new_tokens = config_params["MAX_NEW_TOKENS"]
-    temperature = config_params["TEMPERATURE"]
-    batch_size = config_params["BATCH_SIZE"]
-
-    results_for_main_process = []
-
-    try:
-        llama_model = LlamaModel(model_name)
-        template_json = json.loads(open(template_path, "r").read())
-        os.makedirs(results_dir, exist_ok=True)
-
-        prompts_to_process = []
-        original_indices_map = {}
-
-        for local_idx, (global_idx, persona_text) in enumerate(persona_data_chunk):
-            prompt = build_extraction_prompt(persona_text, template_json)
-            prompts_to_process.append(prompt)
-            original_indices_map[local_idx] = global_idx
-
-        num_personas_in_chunk = len(prompts_to_process)
-
-        for i in range(0, num_personas_in_chunk, batch_size):
-            batch_prompts = prompts_to_process[i : i + batch_size]
-
-            try:
-                full_model_outputs: List[str] = llama_model.generate_response(
-                    batch_prompts,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                )
-            except torch.cuda.OutOfMemoryError as e:
-                print(
-                    f"!!! Process on GPU {gpu_id}: CUDA Out of Memory for batch starting with persona {original_indices_map[i // batch_size * batch_size]}. Skipping batch. Error: {e}"
-                )
-                for j in range(len(batch_prompts)):
-                    local_batch_idx = i + j
-                    persona_global_idx = original_indices_map[local_batch_idx]
-                    filename = os.path.join(
-                        results_dir,
-                        f"persona_{persona_global_idx}_error_gpu{gpu_id}_OOM.txt",
-                    )
-                    with open(filename, "w", encoding="utf-8") as f:
-                        f.write(
-                            f"CUDA Out Of Memory Error during processing. Original prompt:\n{batch_prompts[j]}\nError: {e}"
-                        )
-                    results_for_main_process.append(
-                        (persona_global_idx, "cuda_oom_error", str(e))
-                    )
-                continue
-
-            for j, output_text in enumerate(full_model_outputs):
-                local_batch_idx = i + j
-                persona_global_idx = original_indices_map[local_batch_idx]
-
-                extracted_json_str = extract_json_from_output(output_text)
-
-                try:
-                    parsed_json = json.loads(extracted_json_str)
-
-                    filename = os.path.join(
-                        results_dir, f"persona_{persona_global_idx}.json"
-                    )
-                    with open(filename, "w", encoding="utf-8") as f:
-                        json.dump(parsed_json, f, indent=2, ensure_ascii=False)
-
-                    results_for_main_process.append(
-                        (persona_global_idx, "success", parsed_json)
-                    )
-
-                except json.JSONDecodeError as e:
-                    filename = os.path.join(
-                        results_dir,
-                        f"persona_{persona_global_idx}_error_gpu{gpu_id}.txt",
-                    )
-                    with open(filename, "w", encoding="utf-8") as f:
-                        f.write(output_text)
-                    results_for_main_process.append(
-                        (persona_global_idx, "json_error", str(e))
-                    )
-                except Exception as e:
-                    filename = os.path.join(
-                        results_dir,
-                        f"persona_{persona_global_idx}_error_gpu{gpu_id}.txt",
-                    )
-                    with open(filename, "w", encoding="utf-8") as f:
-                        f.write(output_text)
-                    results_for_main_process.append(
-                        (persona_global_idx, "other_error", str(e))
-                    )
-
-        return results_for_main_process
-
-    except Exception as e:
-        print(
-            f"!!! Process on GPU {gpu_id}: A critical error occurred in worker process: {e}"
-        )
-        import traceback
-
-        traceback.print_exc()
-        error_results = []
-        for global_idx, _ in persona_data_chunk:
-            error_results.append((global_idx, "critical_error", str(e)))
-        return error_results
-
-
-def main_multi_gpu():
-    mp.set_start_method("spawn", force=True)
-    print("Multiprocessing start method set to 'spawn'.")
-
-    num_gpus = torch.cuda.device_count()
-    if num_gpus == 0:
-        print(
-            "No GPUs found. Please check your CUDA installation and drivers. Exiting."
-        )
-        return
-
-    print(f"Found {num_gpus} GPUs. Preparing to distribute workload...")
-
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    print(f"Main process: Ensured results directory exists: {RESULTS_DIR}")
-
-    print(
-        f"Main process: Loading full dataset: {DATASET_NAME}/{DATASET_SUBSET} split {DATASET_SPLIT}..."
+def main():
+    print(f"Initializing vLLM with model: {MODEL_NAME}...")
+    llm = LLM(
+        MODEL_NAME,
+        dtype="auto",
+        max_num_seqs=MAX_NUM_SEQS, 
+        max_model_len=131072, 
+        trust_remote_code=True,      
+        tensor_parallel_size=4, 
+        gpu_memory_utilization=0.9,
     )
+    print("vLLM model initialized.")
+
+    sampling_params = SamplingParams(temperature=TEMPERATURE, max_tokens=MAX_NEW_TOKENS)
+    print(f"Sampling parameters: Temperature={TEMPERATURE}, Max New Tokens={MAX_NEW_TOKENS}")
+
+    print(f"Loading dataset: {DATASET_NAME}/{DATASET_SUBSET} split {DATASET_SPLIT}...")
     full_datasets = load_dataset(DATASET_NAME, DATASET_SUBSET, split=DATASET_SPLIT)
     total_personas_in_dataset = len(full_datasets)
-    print(
-        f"Main process: Full dataset loaded. Total personas in dataset: {total_personas_in_dataset}"
-    )
+    print(f"Dataset loaded. Total personas: {total_personas_in_dataset}")
 
-    processed_ids = get_processed_persona_ids(RESULTS_DIR)
+    print(f"Loading JSON template from: {TEMPLATE_PATH}...")
+    template_json = load_json_template(TEMPLATE_PATH)
+    print("Template loaded successfully.")
+
+    ensure_directory_exists(RESULTS_DIR)
+    print(f"Ensured results directory exists: {RESULTS_DIR}")
+
+    processed_ids_at_start = get_processed_persona_ids(RESULTS_DIR)
+    initial_completed_count = len(processed_ids_at_start) 
 
     personas_to_process_tuples = []
     for global_idx, data_entry in enumerate(full_datasets):
-        if global_idx not in processed_ids:
+        if global_idx not in processed_ids_at_start:
             personas_to_process_tuples.append((global_idx, data_entry["persona"]))
+    
+    remaining_at_start_of_run = len(personas_to_process_tuples) 
+    
+    print(f"\n--- Progress Summary: {initial_completed_count} successfully processed, {remaining_at_start_of_run} to process in this run (out of {total_personas_in_dataset} total) ---\n")
 
-    remaining_personas_count = len(personas_to_process_tuples)
-
-    print(
-        f"\n--- Progress Summary: {total_personas_in_dataset - remaining_personas_count} completed, {remaining_personas_count} left out of {total_personas_in_dataset} total personas ---\n"
-    )
-
-    if remaining_personas_count == 0:
-        print("All personas have been processed. Exiting.")
+    if remaining_at_start_of_run == 0:
+        print("All personas have been successfully processed. Exiting.")
         return
 
-    chunked_data_with_indices: List[List[Tuple[int, str]]] = [
-        [] for _ in range(num_gpus)
-    ]
+    list_of_prompts_for_vllm = []
+    vllm_output_idx_to_global_idx = {}
     for i, (global_idx, persona_text) in enumerate(personas_to_process_tuples):
-        target_gpu_idx = i % num_gpus
-        chunked_data_with_indices[target_gpu_idx].append((global_idx, persona_text))
+        prompt = build_extraction_prompt(persona_text, template_json)
+        list_of_prompts_for_vllm.append(prompt)
+        vllm_output_idx_to_global_idx[i] = global_idx
 
-    config_for_workers = {
-        "MODEL_NAME": MODEL_NAME,
-        "TEMPLATE_PATH": TEMPLATE_PATH,
-        "RESULTS_DIR": RESULTS_DIR,
-        "MAX_NEW_TOKENS": MAX_NEW_TOKENS,
-        "TEMPERATURE": TEMPERATURE,
-        "BATCH_SIZE": BATCH_SIZE,
-    }
-
-    worker_args = []
-    for i in range(num_gpus):
-        if chunked_data_with_indices[i]:
-            worker_args.append((chunked_data_with_indices[i], i, config_for_workers))
-
-    start_full_process_time = time.time()
-
-    with mp.Pool(processes=num_gpus) as pool:
-        for _ in tqdm(
-            pool.imap_unordered(_worker_process_wrapper, worker_args),
-            total=len(worker_args),
-            desc="Processing Chunks by GPU",
-        ):
-            pass
-
-    end_full_process_time = time.time()
-    final_total_time = end_full_process_time - start_full_process_time
-
-    print("\n--- All GPU workers finished processing. ---")
-    print(
-        f"Overall total processing time for remaining {remaining_personas_count} personas: {final_total_time:.2f} seconds"
+    print(f"Sending {len(list_of_prompts_for_vllm)} prompts to vLLM for generation...")
+    
+    start_vllm_generation_time = time.time()
+    request_outputs = llm.generate(
+        prompts=list_of_prompts_for_vllm,
+        sampling_params=sampling_params,
     )
-    if remaining_personas_count > 0:
-        print(
-            f"Average processing time per remaining persona: {final_total_time / remaining_personas_count:.2f} seconds"
-        )
+    end_vllm_generation_time = time.time()
+    vllm_total_inference_time = end_vllm_generation_time - start_vllm_generation_time
+    print(f"vLLM generation completed for {len(list_of_prompts_for_vllm)} prompts in {vllm_total_inference_time:.2f} seconds.")
+    if len(list_of_prompts_for_vllm) > 0:
+        print(f"Average vLLM inference time per persona: {vllm_total_inference_time / len(list_of_prompts_for_vllm):.2f} seconds.")
+
+
+    total_saving_and_processing_time = 0
+    completed_in_this_run_counter = 0 
+
+    print("\nStarting to process and save generated outputs...")
+    with tqdm(total=remaining_at_start_of_run, desc="Saving & Processing Outputs", unit="persona") as pbar:
+        for i, output in enumerate(request_outputs): 
+            start_time_persona_save = time.time()
+            
+            global_idx = vllm_output_idx_to_global_idx[i]
+            
+            if not output.outputs: 
+                generated_text = ""
+                error_message = "No output generated by vLLM."
+                print(f"\n!!! WARNING: No output generated for persona {global_idx}. Error: {error_message}")
+                filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}_error_no_output.txt")
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(f"No output generated for persona {global_idx}. Original prompt:\n{list_of_prompts_for_vllm[i]}\nError: {error_message}")
+                
+                completed_in_this_run_counter += 1
+                pbar.update(1)
+                time_taken_persona_save = time.time() - start_time_persona_save
+                total_saving_and_processing_time += time_taken_persona_save
+                current_absolute_remaining = total_personas_in_dataset - (initial_completed_count + completed_in_this_run_counter)
+                pbar.set_postfix_str(f"Save Time: {time_taken_persona_save:.2f}s | Abs Remaining: {current_absolute_remaining}")
+                continue
+
+            generated_text = output.outputs[0].text 
+            
+            extracted_json_str = extract_json_from_output(generated_text) 
+
+            try:
+                parsed_json = json.loads(extracted_json_str)
+                
+                filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}.json")
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(parsed_json, f, indent=2, ensure_ascii=False)
+                
+                completed_in_this_run_counter += 1
+                pbar.update(1) 
+
+            except json.JSONDecodeError as e:
+                print(f"\n!!! ERROR: Could not extract valid JSON for persona {global_idx}. JSONDecodeError: {e}")
+                print(f"!!! Problematic string (first 500 chars): \n{extracted_json_str[:500]}...")
+                print("!!! Saving full raw output to a .txt file for debugging.")
+                filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}_error.txt")
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(generated_text)
+                
+                completed_in_this_run_counter += 1
+                pbar.update(1) 
+            except Exception as e:
+                print(f"\n!!! An unexpected error occurred for persona {global_idx} during saving: {e}")
+                filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}_error.txt")
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(generated_text)
+                
+                completed_in_this_run_counter += 1
+                pbar.update(1) 
+
+            end_time_persona_save = time.time()
+            time_taken_persona_save = end_time_persona_save - start_time_persona_save
+            total_saving_and_processing_time += time_taken_persona_save
+            
+            current_absolute_remaining = total_personas_in_dataset - (initial_completed_count + completed_in_this_run_counter)
+            pbar.set_postfix_str(f"Save Time: {time_taken_persona_save:.2f}s | Abs Remaining: {current_absolute_remaining}")
+
+
+    print(f"\n--- All remaining personas processed ---")
+    if remaining_at_start_of_run > 0:
+        print(f"Total time for saving and post-processing {remaining_at_start_of_run} attempted personas: {total_saving_and_processing_time:.2f} seconds")
+        print(f"Average saving and post-processing time per persona: {total_saving_and_processing_time / remaining_at_start_of_run:.2f} seconds")
+    else:
+        print("No new personas were processed in this run.")
+
+
+    final_successful_count = len(get_processed_persona_ids(RESULTS_DIR))
+    print(f"Total successfully processed JSONs: {final_successful_count} out of {total_personas_in_dataset}")
 
 
 if __name__ == "__main__":
-    main_multi_gpu()
+    print("\n--- Starting Persona Processing with vLLM ---")
+    main()

@@ -539,5 +539,12 @@ MigrationBackup/
 .ionide/
 
 .env
-*.json
+# Ignore all JSON files in all folders
+**/*.json
+
+# Except specific files
+!template.json
+
+# Ignore results directory
+results/
 # End of https://www.toptal.com/developers/gitignore/api/python,vs,venv

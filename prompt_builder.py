@@ -37,12 +37,12 @@ def build_extraction_prompt(persona: str, template_json: dict) -> str:
 
     Instructions:
     - Fill in the following JSON fields based only on the persona information.
-    - If something is not specified or uncertain, creatively fill up with what is appropriate and realistic to the persona.
-    - Avoid generic or implausible values but be a creative and realistic across different personas.
-    - Not all Europeans or non-Europeans who are residence (citizens) of United State (United Kingdom) are fluency in their ability of speaking English, though majority are.
-    - For inclusion and diversity of personas, seldomly fill 'disability', 'vision difficulty' and 'veteran status' with pausible values (instead of 'None') correlating to other keys in the JSON template
-    - Use the following value constraints when applicable and DO NOT collapse nested keys in JSON template.
-    - Once the JSON template has been completely filled, DO NOT generate any further text or tokens in any format again.
+    - If something is not specified or uncertain, creatively fill in with what is appropriate and realistic to the persona.
+    - Avoid generic or implausible values, but be creative and realistic across different personas.
+    - Not all Europeans or non-Europeans who are residents (citizens) of the United States (United Kingdom) are fluent in English, though the majority are.
+    - For inclusion and diversity of personas, seldom fill 'disability', 'vision difficulty', and 'veteran status' with plausible values (instead of 'None') correlating to other keys in the JSON template
+    - Use the following value constraints when applicable and DO NOT collapse nested keys in the JSON template.
+    - DO NOT generate any further text or tokens in any format again.
 
     Formatting:
     - Use the template for style, capitalization, and brevity.
@@ -53,10 +53,9 @@ def build_extraction_prompt(persona: str, template_json: dict) -> str:
 
     {dependencies}
 
-    - Here's the JSON template to be considered but DO NOT output it in the generated output.
+    - Here's the JSON template to be considered, but DO NOT output it in the generated output.
     {template_str}
 
-    Only return valid JSON. Do not add
-    explanations or extra text.
+    - Once the JSON template has been filled, start its output with "```json" and end it with "```", then DO NOT generate any further text or tokens in any format again. 
     """.strip()
     return prompt
