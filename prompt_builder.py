@@ -39,6 +39,8 @@ def build_extraction_prompt(persona: str, template_json: dict) -> str:
     - Fill in the following JSON fields based only on the persona information.
     - If something is not specified or uncertain, creatively fill up with what is appropriate and realistic to the persona.
     - Avoid generic or implausible values but be a creative and realistic across different personas.
+    - Not all Europeans or non-Europeans who are residence (citizens) of United State (United Kingdom) are fluency in their ability of speaking English, though majority are.
+    - For inclusion and diversity of personas, seldomly fill 'disability', 'vision difficulty' and 'veteran status' with pausible values (instead of 'None') correlating to other keys in the JSON template
     - Use the following value constraints when applicable and DO NOT collapse nested keys in JSON template.
     - Once the JSON template has been completely filled, DO NOT generate any further text or tokens in any format again.
 

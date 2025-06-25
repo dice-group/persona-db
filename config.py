@@ -1,4 +1,4 @@
-MODEL_NAME = "../quantize/Llama-3.3-70B-Instruct_awq" # Ensure the correct path of your (quantize) model 
+MODEL_NAME = "../quantize/Llama-3.3-70B-Instruct_awq"
 DATASET_NAME = "proj-persona/PersonaHub"
 DATASET_SUBSET = "persona"
 DATASET_SPLIT = "train[:5001]"
@@ -6,4 +6,4 @@ TEMPLATE_PATH = "template.json"
 RESULTS_DIR = "results"
 MAX_NEW_TOKENS = 1024
 TEMPERATURE = 0.2
-BATCH_SIZE = 8
+BATCH_SIZE = 128
