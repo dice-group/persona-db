@@ -1,5 +1,6 @@
 import json
 
+
 def build_extraction_prompt(persona: str, template_json: dict) -> str:
     """
     Constructs the prompt for extracting structured information from a persona.

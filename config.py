@@ -1,4 +1,6 @@
-MODEL_NAME = "../quantize/Llama-3.3-70B-Instruct_awq" # Ensure it matches with your directory
+MODEL_NAME = (
+    "../quantize/Llama-3.3-70B-Instruct_awq"  # Ensure it matches with your directory
+)
 DATASET_NAME = "proj-persona/PersonaHub"
 DATASET_SUBSET = "persona"
 DATASET_SPLIT = "train[:5001]"
