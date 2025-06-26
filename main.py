@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from datasets import Dataset
+from datasets import load_dataset
 from config import (
     MODEL_NAME,
     DATASET_NAME,
