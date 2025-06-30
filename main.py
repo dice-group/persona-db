@@ -30,21 +30,25 @@ def main():
     llm = LLM(
         MODEL_NAME,
         dtype="auto",
-        max_num_seqs=MAX_NUM_SEQS, 
-        max_model_len=131072, 
-        trust_remote_code=True,      
-        tensor_parallel_size=4, 
+        max_num_seqs=MAX_NUM_SEQS,
+        max_model_len=131072,
+        trust_remote_code=True,
+        tensor_parallel_size=4,
         gpu_memory_utilization=0.9,
     )
     print("vLLM model initialized.")
 
     sampling_params = SamplingParams(temperature=TEMPERATURE, max_tokens=MAX_NEW_TOKENS)
-    print(f"Sampling parameters: Temperature={TEMPERATURE}, Max New Tokens={MAX_NEW_TOKENS}")
+    print(
+        f"Sampling parameters: Temperature={TEMPERATURE}, Max New Tokens={MAX_NEW_TOKENS}"
+    )
 
     print(f"Loading dataset: {DATASET_NAME}/{DATASET_SUBSET} split {DATASET_SPLIT}...")
     full_datasets = load_dataset(DATASET_NAME, DATASET_SUBSET, split=DATASET_SPLIT)
     total_personas_in_dataset_slice = len(full_datasets)
-    print(f"Dataset loaded. Total personas in current slice: {total_personas_in_dataset_slice}")
+    print(
+        f"Dataset loaded. Total personas in current slice: {total_personas_in_dataset_slice}"
+    )
 
     print(f"Loading JSON template from: {TEMPLATE_PATH}...")
     template_json = load_json_template(TEMPLATE_PATH)
@@ -59,38 +63,49 @@ def main():
         offset_from_original_dataset_start = int(split_match.group(2))
 
     personas_to_process_tuples_all_in_slice = []
-    all_global_ids_in_current_slice = set() 
+    all_global_ids_in_current_slice = set()
     for relative_idx_in_slice, data_entry in enumerate(full_datasets):
         true_global_idx = offset_from_original_dataset_start + relative_idx_in_slice
-        
-        personas_to_process_tuples_all_in_slice.append((true_global_idx, data_entry["persona"]))
+
+        personas_to_process_tuples_all_in_slice.append(
+            (true_global_idx, data_entry["persona"])
+        )
         all_global_ids_in_current_slice.add(true_global_idx)
 
-    processed_ids_at_start = get_processed_persona_ids(RESULTS_DIR, all_global_ids_in_current_slice)
-    initial_completed_count_in_slice = len(processed_ids_at_start) 
+    processed_ids_at_start = get_processed_persona_ids(
+        RESULTS_DIR, all_global_ids_in_current_slice
+    )
+    initial_completed_count_in_slice = len(processed_ids_at_start)
 
     personas_to_process_this_run = []
     for global_idx, persona_text in personas_to_process_tuples_all_in_slice:
         if global_idx not in processed_ids_at_start:
             personas_to_process_this_run.append((global_idx, persona_text))
-    
-    remaining_at_start_of_run = len(personas_to_process_this_run)    
-    
-    print(f"\n--- Progress Summary for current slice ({DATASET_SPLIT}): {initial_completed_count_in_slice} successfully processed, {remaining_at_start_of_run} to process in this run (out of {total_personas_in_dataset_slice} in slice) ---\n")
+
+    remaining_at_start_of_run = len(personas_to_process_this_run)
+
+    print(
+        f"\n--- Progress Summary for current slice ({DATASET_SPLIT}): {initial_completed_count_in_slice} successfully processed, {remaining_at_start_of_run} to process in this run (out of {total_personas_in_dataset_slice} in slice) ---\n"
+    )
 
     if remaining_at_start_of_run == 0:
-        print("All personas in the current dataset slice have been successfully processed. Exiting.")
+        print(
+            "All personas in the current dataset slice have been successfully processed. Exiting."
+        )
         return
 
     list_of_prompts_for_vllm = []
     vllm_output_idx_to_global_idx = {}
+    vllm_output_idx_to_persona_text = {}
+
     for i, (global_idx, persona_text) in enumerate(personas_to_process_this_run):
         prompt = build_extraction_prompt(persona_text, template_json)
         list_of_prompts_for_vllm.append(prompt)
         vllm_output_idx_to_global_idx[i] = global_idx
+        vllm_output_idx_to_persona_text[i] = persona_text
 
     print(f"Sending {len(list_of_prompts_for_vllm)} prompts to vLLM for generation...")
-    
+
     start_vllm_generation_time = time.time()
     request_outputs = llm.generate(
         prompts=list_of_prompts_for_vllm,
@@ -98,90 +113,132 @@ def main():
     )
     end_vllm_generation_time = time.time()
     vllm_total_inference_time = end_vllm_generation_time - start_vllm_generation_time
-    print(f"vLLM generation completed for {len(list_of_prompts_for_vllm)} prompts in {vllm_total_inference_time:.2f} seconds.")
+    print(
+        f"vLLM generation completed for {len(list_of_prompts_for_vllm)} prompts in {vllm_total_inference_time:.2f} seconds."
+    )
     if len(list_of_prompts_for_vllm) > 0:
-        print(f"Average vLLM inference time per persona: {vllm_total_inference_time / len(list_of_prompts_for_vllm):.2f} seconds.")
+        print(
+            f"Average vLLM inference time per persona: {vllm_total_inference_time / len(list_of_prompts_for_vllm):.2f} seconds."
+        )
 
     total_saving_and_processing_time = 0
-    completed_in_this_run_counter = 0 
+    completed_in_this_run_counter = 0
 
     print("\nStarting to process and save generated outputs...")
-    with tqdm(total=remaining_at_start_of_run, desc="Saving & Processing Outputs", unit="persona") as pbar:
-        for i, output in enumerate(request_outputs): 
+    with tqdm(
+        total=remaining_at_start_of_run,
+        desc="Saving & Processing Outputs",
+        unit="persona",
+    ) as pbar:
+        for i, output in enumerate(request_outputs):
             start_time_persona_save = time.time()
-            
+
             global_idx = vllm_output_idx_to_global_idx[i]
-            
-            if not output.outputs: 
+            current_persona_text = vllm_output_idx_to_persona_text[i]
+
+            if not output.outputs:
                 generated_text = ""
                 error_message = "No output generated by vLLM."
-                print(f"\n!!! WARNING: No output generated for persona {global_idx}. Error: {error_message}")
-                filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}_error_no_output.txt")
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(f"No output generated for persona {global_idx}. Original prompt:\n{list_of_prompts_for_vllm[i]}\nError: {error_message}")
-                
+                print(
+                    f"\n!!! WARNING: No output generated for persona {global_idx}. Error: {error_message}"
+                )
+                filename = os.path.join(
+                    RESULTS_DIR, f"persona_{global_idx}_error_no_output.txt"
+                )
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(
+                        f"No output generated for persona {global_idx}. Original prompt:\n{list_of_prompts_for_vllm[i]}\nError: {error_message}"
+                    )
+
                 completed_in_this_run_counter += 1
                 pbar.update(1)
                 time_taken_persona_save = time.time() - start_time_persona_save
                 total_saving_and_processing_time += time_taken_persona_save
-                current_relative_remaining = total_personas_in_dataset_slice - (initial_completed_count_in_slice + completed_in_this_run_counter)
-                pbar.set_postfix_str(f"Save Time: {time_taken_persona_save:.2f}s | Relative Remaining: {current_relative_remaining}")
+                current_relative_remaining = total_personas_in_dataset_slice - (
+                    initial_completed_count_in_slice + completed_in_this_run_counter
+                )
+                pbar.set_postfix_str(
+                    f"Save Time: {time_taken_persona_save:.2f}s | Relative Remaining: {current_relative_remaining}"
+                )
                 continue
 
-            generated_text = output.outputs[0].text 
-            
-            extracted_json_str = extract_json_from_output(generated_text) 
+            generated_text = output.outputs[0].text
+            extracted_json_str = extract_json_from_output(generated_text)
 
             try:
                 if extracted_json_str is None:
-                    raise json.JSONDecodeError("extract_json_from_output returned None", "", 0)
+                    raise json.JSONDecodeError(
+                        "extract_json_from_output returned None", "", 0
+                    )
 
                 parsed_json = json.loads(extracted_json_str)
-                
+                parsed_json["description"] = current_persona_text
+
                 filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}.json")
-                with open(filename, 'w', encoding='utf-8') as f:
+                with open(filename, "w", encoding="utf-8") as f:
                     json.dump(parsed_json, f, indent=2, ensure_ascii=False)
-                
+
                 completed_in_this_run_counter += 1
-                pbar.update(1) 
+                pbar.update(1)
 
             except json.JSONDecodeError as e:
-                print(f"\n!!! ERROR: Could not extract valid JSON for persona {global_idx}. JSONDecodeError: {e}")
-                problematic_snippet = extracted_json_str[:500] if extracted_json_str else "(empty or None)"
-                print(f"!!! Problematic string (first 500 chars): \n{problematic_snippet}...")
+                print(
+                    f"\n!!! ERROR: Could not extract valid JSON for persona {global_idx}. JSONDecodeError: {e}"
+                )
+                problematic_snippet = (
+                    extracted_json_str[:500]
+                    if extracted_json_str
+                    else "(empty or None)"
+                )
+                print(
+                    f"!!! Problematic string (first 500 chars): \n{problematic_snippet}..."
+                )
                 print("!!! Saving full raw output to a .txt file for debugging.")
                 filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}_error.txt")
-                with open(filename, 'w', encoding='utf-8') as f:
+                with open(filename, "w", encoding="utf-8") as f:
                     f.write(generated_text)
-                    
+
                 completed_in_this_run_counter += 1
-                pbar.update(1) 
+                pbar.update(1)
             except Exception as e:
-                print(f"\n!!! An unexpected error occurred for persona {global_idx} during saving: {e}")
+                print(
+                    f"\n!!! An unexpected error occurred for persona {global_idx} during saving: {e}"
+                )
                 filename = os.path.join(RESULTS_DIR, f"persona_{global_idx}_error.txt")
-                with open(filename, 'w', encoding='utf-8') as f:
+                with open(filename, "w", encoding="utf-8") as f:
                     f.write(generated_text)
-                    
+
                 completed_in_this_run_counter += 1
-                pbar.update(1) 
+                pbar.update(1)
 
             end_time_persona_save = time.time()
             time_taken_persona_save = end_time_persona_save - start_time_persona_save
             total_saving_and_processing_time += time_taken_persona_save
-            
-            current_relative_remaining = total_personas_in_dataset_slice - (initial_completed_count_in_slice + completed_in_this_run_counter)
-            pbar.set_postfix_str(f"Save Time: {time_taken_persona_save:.2f}s | Relative Remaining: {current_relative_remaining}")
 
+            current_relative_remaining = total_personas_in_dataset_slice - (
+                initial_completed_count_in_slice + completed_in_this_run_counter
+            )
+            pbar.set_postfix_str(
+                f"Save Time: {time_taken_persona_save:.2f}s | Relative Remaining: {current_relative_remaining}"
+            )
 
     print(f"\n--- All remaining personas processed ---")
     if remaining_at_start_of_run > 0:
-        print(f"Total time for saving and post-processing {remaining_at_start_of_run} attempted personas: {total_saving_and_processing_time:.2f} seconds")
-        print(f"Average saving and post-processing time per persona: {total_saving_and_processing_time / remaining_at_start_of_run:.2f} seconds")
+        print(
+            f"Total time for saving and post-processing {remaining_at_start_of_run} attempted personas: {total_saving_and_processing_time:.2f} seconds"
+        )
+        print(
+            f"Average saving and post-processing time per persona: {total_saving_and_processing_time / remaining_at_start_of_run:.2f} seconds"
+        )
     else:
         print("No new personas were processed in this run.")
 
-    final_successful_count_in_slice = len(get_processed_persona_ids(RESULTS_DIR, all_global_ids_in_current_slice))
-    print(f"Total successfully processed JSONs for slice ({DATASET_SPLIT}): {final_successful_count_in_slice} out of {total_personas_in_dataset_slice}")
+    final_successful_count_in_slice = len(
+        get_processed_persona_ids(RESULTS_DIR, all_global_ids_in_current_slice)
+    )
+    print(
+        f"Total successfully processed JSONs for slice ({DATASET_SPLIT}): {final_successful_count_in_slice} out of {total_personas_in_dataset_slice}"
+    )
 
 
 if __name__ == "__main__":

@@ -1,7 +1,11 @@
 import os
 import random
 import re
+from config import RESULTS_DIR
 from rdflib import Graph, URIRef
+
+from utils import assert_file_exists
+
 
 def load_graph(file_path: str, format: str = "turtle") -> Graph | None:
     """
@@ -58,7 +62,9 @@ def extract_numeric_suffix(uri: URIRef) -> int | float:
     return int(match.group(1)) if match else float('inf')
     
 if __name__ == "__main__":
-    rdf_file = "results/rdf_processed/personas-db.ttl"
+    rdf_file = f"{RESULTS_DIR}/rdf_processed/personas-db.ttl"
+    assert_file_exists(rdf_file)
+    
     graph = load_graph(rdf_file)
 
     if graph:

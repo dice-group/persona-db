@@ -30,7 +30,10 @@ def format_template_for_prompt(template: dict) -> str:
     """
     return json.dumps({key: "" for key in template.keys()}, indent=2)
 
-
+def assert_file_exists(file_path: str):
+    """Raises AssertionError if the file does not exist."""
+    assert os.path.isfile(file_path), f"File does not exist: {file_path}"
+    
 def ensure_directory_exists(directory_path: str) -> None:
     """
     Ensure that a directory exists, creating it if necessary.

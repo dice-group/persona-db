@@ -5,12 +5,14 @@ from rdflib.namespace import XSD
 from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 from typing import Dict, Any, Set, Tuple, List, Optional
+from config import RESULTS_DIR
+from utils import assert_file_exists
 
 EX = Namespace("http://example.org/vocab#")
 BASE = "http://example.org/persona/"
 
-INPUT_DIR = "results/"
-OUTPUT_DIR = "results/rdf_processed"
+INPUT_DIR = RESULTS_DIR
+OUTPUT_DIR = f"{RESULTS_DIR}/rdf_processed"
 
 MAIN_RDF_FILE = os.path.join(OUTPUT_DIR, "personas-db.ttl")
 UNPROCESSED_JSON_FILE = os.path.join(OUTPUT_DIR, "unprocessed_personas-db.json")
@@ -53,6 +55,7 @@ FIELD_DEFINITIONS = {
     "sex": ("string", "sex"),
     "veteran status": ("string", "veteranStatus"),
     "vision difficulty": ("string", "visionDifficulty"),
+    "description": ("string", "description"),
 }
 
 def load_json_file(filepath: str) -> Optional[Dict[str, Any]]:
@@ -185,6 +188,8 @@ def convert_persona_json_to_rdf_graph(person_id: int, data: Dict[str, Any]) -> T
         return None, False
 
 def convert_and_get_result_wrapper(person_id: int, filepath: str) -> Tuple[int, Optional[Graph], str]:
+    assert_file_exists(filepath)
+    
     data = load_json_file(filepath)
     if data is None:
         return person_id, None, "load_error"
@@ -274,7 +279,7 @@ def process_all_personas():
             print(f"WARNING: Could not parse existing '{MAIN_RDF_FILE}'. Starting with an empty graph. Error: {e}")
     main_rdf_graph.bind("ex", EX)
     main_rdf_graph.bind("xsd", XSD)
-
+    
     processed_ids_in_main_rdf = load_processed_persona_ids_from_rdf(MAIN_RDF_FILE)
     unprocessed_personas_data = load_unprocessed_personas_data(UNPROCESSED_JSON_FILE)
 
