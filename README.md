@@ -15,7 +15,7 @@ This repository host the implementation of the persona databases project
    
 3. Install pip and dependencies:
     ```bash 
-    conda install pip3
+    conda install pip
     pip3 install -r requirements.txt
 
 4. Configure your model and dataset split:

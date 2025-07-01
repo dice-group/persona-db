@@ -202,7 +202,7 @@ def convert_and_get_result_wrapper(person_id: int, filepath: str) -> Tuple[int, 
         elif conversion_warnings_occurred:
             return person_id, None, "conversion_warning"
         else:
-            return person_id, None, "conversion_error_or_empty_data" # Renamed from schema_error, as schema errors now skip keys. This indicates other non-type conversion issues.
+            return person_id, None, "conversion_error_or_empty_data" 
     except Exception as e:
         if VERBOSE:
             print(f"CRITICAL ERROR: Uncaught exception during parallel processing of persona {person_id} from {filepath}: {e}")
