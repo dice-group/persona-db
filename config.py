@@ -1,9 +1,7 @@
-MODEL_NAME = (
-    "../quantize/Llama-3.3-70B-Instruct_awq"  # Ensure it matches with your directory
-)
+MODEL_NAME ="../quantize/Llama-3.3-70B-Instruct_awq"  # Ensure it matches with your directory
 DATASET_NAME = "proj-persona/PersonaHub"
 DATASET_SUBSET = "persona"
-DATASET_SPLIT = "train[:5001]"
+DATASET_SPLIT = "train[:5001]" # Ensure you split is correct else it runs all
 TEMPLATE_PATH = "template.json"
 RESULTS_DIR = "results"
 MAX_NEW_TOKENS = 512
