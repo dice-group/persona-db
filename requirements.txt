@@ -141,7 +141,7 @@ tzdata==2025.2
 urllib3==2.5.0
 uvicorn==0.34.3
 uvloop==0.21.0
-vllm==0.9.1
+vllm==0.10.1.1
 watchfiles==1.1.0
 websockets==15.0.1
 xformers==0.0.30
