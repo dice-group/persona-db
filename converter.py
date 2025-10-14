@@ -8,8 +8,8 @@ from typing import Dict, Any, Set, Tuple, List, Optional
 from config import RESULTS_DIR
 from utils import assert_file_exists
 
-EX = Namespace("http://example.org/vocab#")
-BASE = "http://example.org/persona/"
+EX = Namespace("http://www.example.org/vocab#")
+BASE = "http://www.example.org/persona/"
 
 INPUT_DIR = RESULTS_DIR
 OUTPUT_DIR = f"{RESULTS_DIR}/rdf_processed"
