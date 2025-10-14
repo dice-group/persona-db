@@ -30,3 +30,5 @@ This repository host the implementation of the persona databases project
 5. Run the main script:
     ```bash
     python3 main.py
+
+The link to the used dataset can be found in [HuggingFace-PersonaHub-Persona](https://huggingface.co/datasets/proj-persona/PersonaHub/viewer/persona?views%5B%5D=persona)
